@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { WORLDID_OIDC_CONFIG } from "@/lib/worldid-config";
-import { useConnect } from "thirdweb/react";
+import { useConnect, useDisconnect, useActiveWallet } from "thirdweb/react";
 import { inAppWallet } from "thirdweb/wallets";
 import { createThirdwebClient } from "thirdweb";
 import { useActiveAccount } from "thirdweb/react";
@@ -12,7 +12,9 @@ export default function Home() {
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { connect } = useConnect();
+  const { disconnect } = useDisconnect();
   const activeAccount = useActiveAccount();
+  const activeWallet = useActiveWallet();
 
   const client = createThirdwebClient({
     clientId: process.env.NEXT_PUBLIC_THIRDWEB_CLIENT_ID || "",
@@ -34,7 +36,7 @@ export default function Home() {
 
   const handleAuthCallback = async (token: string) => {
     try {
-      const wallet = await connect(async () => {
+      await connect(async () => {
         const wallet = inAppWallet();
         await wallet.connect({
           client,
@@ -46,6 +48,8 @@ export default function Home() {
       });
 
       setIsConnected(true);
+      localStorage.setItem("walletConnected", "true");
+      localStorage.setItem("jwtToken", token);
     } catch (error) {
       console.error("Error connecting wallet:", error);
       if (error instanceof Error) {
@@ -58,6 +62,28 @@ export default function Home() {
       );
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const reconnectWallet = async () => {
+    const token = localStorage.getItem("jwtToken");
+    if (token) {
+      await handleAuthCallback(token);
+    }
+  };
+
+  const handleDisconnect = async () => {
+    try {
+      if (activeWallet) {
+        await disconnect(activeWallet);
+        setIsConnected(false);
+        localStorage.removeItem("walletConnected");
+        localStorage.removeItem("jwtToken");
+      } else {
+        console.error("No active wallet to disconnect");
+      }
+    } catch (error) {
+      console.error("Error disconnecting wallet:", error);
     }
   };
 
@@ -74,6 +100,12 @@ export default function Home() {
           ? "No authentication code received"
           : "Authentication failed"
       );
+    } else {
+      const isWalletConnected =
+        localStorage.getItem("walletConnected") === "true";
+      if (isWalletConnected) {
+        reconnectWallet();
+      }
     }
 
     // クリーンアップ: URLからパラメータを削除
@@ -98,6 +130,12 @@ export default function Home() {
               Connected with WorldID and Thirdweb
             </p>
             <p>Active account: {activeAccount?.address}</p>
+            <button
+              onClick={handleDisconnect}
+              className="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded"
+            >
+              Disconnect
+            </button>
           </div>
         )}
         {error && <p className="text-red-500 mt-4">{error}</p>}

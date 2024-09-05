@@ -15,6 +15,35 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "No code provided" }, { status: 400 });
   }
 
+  const WORLDID_CLIENT_ID = process.env.NEXT_PUBLIC_WORLDID_CLIENT_ID || "";
+
+  if (!WORLDID_CLIENT_ID) {
+    return NextResponse.json(
+      { error: "WorldID client ID not provided" },
+      { status: 500 }
+    );
+  }
+
+  const WORLDID_CLIENT_SECRET = process.env.WORLDID_CLIENT_SECRET || "";
+
+  if (!WORLDID_CLIENT_SECRET) {
+    return NextResponse.json(
+      { error: "WorldID client secret not provided" },
+      { status: 500 }
+    );
+  }
+
+  const WORLDID_REDIRECT_URL = process.env.NEXT_PUBLIC_BASE_URL
+    ? `${process.env.NEXT_PUBLIC_BASE_URL}/api/auth/worldid`
+    : "";
+
+  if (!WORLDID_REDIRECT_URL) {
+    return NextResponse.json(
+      { error: "WorldID redirect URL not provided" },
+      { status: 500 }
+    );
+  }
+
   try {
     // Authorization codeをトークンと交換
     const tokenResponse = await fetch(WORLDID_OIDC_CONFIG.tokenEndpoint, {
@@ -22,13 +51,13 @@ export async function GET(request: NextRequest) {
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
         Authorization: `Basic ${Buffer.from(
-          `${WORLDID_OIDC_CONFIG.clientId}:${WORLDID_OIDC_CONFIG.clientSecret}`
+          `${WORLDID_CLIENT_ID}:${WORLDID_CLIENT_SECRET}`
         ).toString("base64")}`,
       },
       body: new URLSearchParams({
         grant_type: "authorization_code",
         code: code,
-        redirect_uri: WORLDID_OIDC_CONFIG.redirectUri,
+        redirect_uri: WORLDID_REDIRECT_URL,
       }),
     });
 
@@ -55,7 +84,7 @@ export async function GET(request: NextRequest) {
     const JWKS = jose.createRemoteJWKSet(new URL(WORLDID_OIDC_CONFIG.jwksUri));
     const { payload } = await jose.jwtVerify(idToken, JWKS, {
       issuer: WORLDID_OIDC_CONFIG.issuer,
-      audience: WORLDID_OIDC_CONFIG.clientId,
+      audience: WORLDID_CLIENT_ID,
     });
 
     if (!payload || !payload.sub) {
@@ -75,9 +104,9 @@ export async function GET(request: NextRequest) {
     const kid = decodedHeader.kid;
 
     const thirdwebPayload = {
-      iss: WORLDID_OIDC_CONFIG.baseUri,
+      iss: process.env.NEXT_PUBLIC_BASE_URL,
       sub: payload.sub,
-      aud: process.env.THIRDWEB_CLIENT_ID,
+      aud: process.env.NEXT_PUBLIC_THIRDWEB_CLIENT_ID,
       exp: Math.floor(Date.now() / 1000) + 3600,
     };
 
@@ -91,14 +120,17 @@ export async function GET(request: NextRequest) {
     // クライアントにトークンを返す
     return NextResponse.redirect(
       new URL(
-        `${WORLDID_OIDC_CONFIG.baseUri}/?token=${thirdwebToken}`,
+        `${process.env.NEXT_PUBLIC_BASE_URL}/?token=${thirdwebToken}`,
         request.url
       )
     );
   } catch (error) {
     console.error("Error during WorldID authentication:", error);
     return NextResponse.redirect(
-      new URL(`${WORLDID_OIDC_CONFIG.baseUri}/?error=auth_failed`, request.url)
+      new URL(
+        `${process.env.NEXT_PUBLIC_BASE_URL}/?error=auth_failed`,
+        request.url
+      )
     );
   }
 }

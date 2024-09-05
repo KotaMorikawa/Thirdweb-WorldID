@@ -1,11 +1,11 @@
 "use client";
-
 import { useState, useEffect } from "react";
 import { WORLDID_OIDC_CONFIG } from "@/lib/worldid-config";
 import { useConnect, useDisconnect, useActiveWallet } from "thirdweb/react";
 import { inAppWallet } from "thirdweb/wallets";
 import { createThirdwebClient } from "thirdweb";
 import { useActiveAccount } from "thirdweb/react";
+import EnhancedWalletUI from "@/app/components/EnhancedWalletUI";
 
 export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
@@ -13,7 +13,7 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const { connect } = useConnect();
   const { disconnect } = useDisconnect();
-  const activeAccount = useActiveAccount();
+  const activeAccount = useActiveAccount() ?? null;
   const activeWallet = useActiveWallet();
 
   const client = createThirdwebClient({
@@ -24,11 +24,16 @@ export default function Home() {
     setIsLoading(true);
     setError(null);
 
+    const WORLDID_CLIENT_ID = process.env.NEXT_PUBLIC_WORLDID_CLIENT_ID || "";
+    const WORLDID_REDIRECT_URL = process.env.NEXT_PUBLIC_BASE_URL
+      ? `${process.env.NEXT_PUBLIC_BASE_URL}/api/auth/worldid`
+      : "";
+
     const authUrl =
       `${WORLDID_OIDC_CONFIG.authorizationEndpoint}?` +
-      `client_id=${WORLDID_OIDC_CONFIG.clientId}&` +
+      `client_id=${WORLDID_CLIENT_ID}&` +
       `response_type=code&` +
-      `redirect_uri=${encodeURIComponent(WORLDID_OIDC_CONFIG.redirectUri)}&` +
+      `redirect_uri=${encodeURIComponent(WORLDID_REDIRECT_URL)}&` +
       `scope=${WORLDID_OIDC_CONFIG.scope}`;
 
     window.location.href = authUrl;
@@ -53,22 +58,12 @@ export default function Home() {
     } catch (error) {
       console.error("Error connecting wallet:", error);
       if (error instanceof Error) {
-        console.error("Error name:", error.name);
-        console.error("Error message:", error.message);
-        console.error("Error stack:", error.stack);
+        setError(error.message);
+      } else {
+        setError("Failed to connect wallet");
       }
-      setError(
-        error instanceof Error ? error.message : "Failed to connect wallet"
-      );
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const reconnectWallet = async () => {
-    const token = localStorage.getItem("jwtToken");
-    if (token) {
-      await handleAuthCallback(token);
     }
   };
 
@@ -80,10 +75,15 @@ export default function Home() {
         localStorage.removeItem("walletConnected");
         localStorage.removeItem("jwtToken");
       } else {
-        console.error("No active wallet to disconnect");
+        setError("No active wallet to disconnect");
       }
     } catch (error) {
       console.error("Error disconnecting wallet:", error);
+      if (error instanceof Error) {
+        setError(error.message);
+      } else {
+        setError("Failed to disconnect wallet");
+      }
     }
   };
 
@@ -104,42 +104,24 @@ export default function Home() {
       const isWalletConnected =
         localStorage.getItem("walletConnected") === "true";
       if (isWalletConnected) {
-        reconnectWallet();
+        const storedToken = localStorage.getItem("jwtToken");
+        if (storedToken) {
+          handleAuthCallback(storedToken);
+        }
       }
     }
 
-    // クリーンアップ: URLからパラメータを削除
     window.history.replaceState({}, document.title, window.location.pathname);
   }, []);
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-between p-24">
-      <div className="z-10 max-w-5xl w-full items-center justify-between font-mono text-sm lg:flex">
-        <h1 className="text-4xl font-bold mb-8">Welcome to Our App</h1>
-        {!isConnected ? (
-          <button
-            onClick={startAuthFlow}
-            disabled={isLoading}
-            className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
-          >
-            {isLoading ? "Connecting..." : "Sign in with World ID"}
-          </button>
-        ) : (
-          <div className="flex flex-col gap-3">
-            <p className="text-green-500">
-              Connected with WorldID and Thirdweb
-            </p>
-            <p>Active account: {activeAccount?.address}</p>
-            <button
-              onClick={handleDisconnect}
-              className="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded"
-            >
-              Disconnect
-            </button>
-          </div>
-        )}
-        {error && <p className="text-red-500 mt-4">{error}</p>}
-      </div>
-    </main>
+    <EnhancedWalletUI
+      isConnected={isConnected}
+      isLoading={isLoading}
+      error={error}
+      activeAccount={activeAccount}
+      startAuthFlow={startAuthFlow}
+      handleDisconnect={handleDisconnect}
+    />
   );
 }

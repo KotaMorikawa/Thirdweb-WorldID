@@ -116,22 +116,24 @@ export async function GET(request: NextRequest) {
       keyid: kid,
     });
 
-    const response = NextResponse.redirect(new URL(BASE_URL, request.url), 302);
+    const response = NextResponse.redirect(new URL(BASE_URL, request.url));
     response.cookies.set("temp_auth_token", thirdwebToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
+      sameSite: "lax",
+      path: "/",
       maxAge: 60,
     });
 
     return response;
   } catch (error) {
     console.error("Error during WorldID authentication:", error);
-    const response = NextResponse.redirect(new URL(BASE_URL, request.url), 302);
+    const response = NextResponse.redirect(new URL(BASE_URL, request.url));
     response.cookies.set("temp_auth_error", "Authentication failed", {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
+      sameSite: "lax",
+      path: "/",
       maxAge: 60,
     });
 

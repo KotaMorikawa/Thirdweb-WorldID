@@ -6,6 +6,7 @@ import { inAppWallet } from "thirdweb/wallets";
 import { createThirdwebClient } from "thirdweb";
 import { useActiveAccount } from "thirdweb/react";
 import EnhancedWalletUI from "@/app/components/EnhancedWalletUI";
+import { useCookies } from "react-cookie";
 
 export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
@@ -15,6 +16,10 @@ export default function Home() {
   const { disconnect } = useDisconnect();
   const activeAccount = useActiveAccount() ?? null;
   const activeWallet = useActiveWallet();
+  const [cookies, setCookie, removeCookie] = useCookies([
+    "temp_auth_token",
+    "temp_auth_error",
+  ]);
 
   const client = createThirdwebClient({
     clientId: process.env.NEXT_PUBLIC_THIRDWEB_CLIENT_ID || "",
@@ -55,6 +60,7 @@ export default function Home() {
       setIsConnected(true);
       localStorage.setItem("walletConnected", "true");
       localStorage.setItem("jwtToken", token);
+      removeCookie("temp_auth_token", { path: "/" });
     } catch (error) {
       console.error("Error connecting wallet:", error);
       if (error instanceof Error) {
@@ -62,6 +68,8 @@ export default function Home() {
       } else {
         setError("Failed to connect wallet");
       }
+      localStorage.removeItem("walletConnected");
+      localStorage.removeItem("jwtToken");
     } finally {
       setIsLoading(false);
     }
@@ -88,30 +96,25 @@ export default function Home() {
   };
 
   useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const token = urlParams.get("token");
-    const error = urlParams.get("error");
-
-    if (token) {
-      handleAuthCallback(token);
-    } else if (error) {
-      setError(
-        error === "no_code"
-          ? "No authentication code received"
-          : "Authentication failed"
-      );
-    } else {
-      const isWalletConnected =
-        localStorage.getItem("walletConnected") === "true";
-      if (isWalletConnected) {
+    const initializeWallet = async () => {
+      setIsLoading(true);
+      if (cookies.temp_auth_token) {
+        await handleAuthCallback(cookies.temp_auth_token);
+      } else if (cookies.temp_auth_error) {
+        setError(cookies.temp_auth_error);
+        removeCookie("temp_auth_error", { path: "/" });
+      } else {
+        const isWalletConnected =
+          localStorage.getItem("walletConnected") === "true";
         const storedToken = localStorage.getItem("jwtToken");
-        if (storedToken) {
-          handleAuthCallback(storedToken);
+        if (isWalletConnected && storedToken) {
+          await handleAuthCallback(storedToken);
         }
       }
-    }
+      setIsLoading(false);
+    };
 
-    window.history.replaceState({}, document.title, window.location.pathname);
+    initializeWallet();
   }, []);
 
   return (

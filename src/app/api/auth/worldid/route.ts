@@ -32,17 +32,16 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
+  const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "";
 
-  const WORLDID_REDIRECT_URL = process.env.NEXT_PUBLIC_BASE_URL
-    ? `${process.env.NEXT_PUBLIC_BASE_URL}/api/auth/worldid`
-    : "";
-
-  if (!WORLDID_REDIRECT_URL) {
+  if (!BASE_URL) {
     return NextResponse.json(
-      { error: "WorldID redirect URL not provided" },
+      { error: "Base URL not provided" },
       { status: 500 }
     );
   }
+
+  const WORLDID_REDIRECT_URL = `${BASE_URL}/api/auth/worldid`;
 
   try {
     // Authorization codeをトークンと交換
@@ -104,7 +103,7 @@ export async function GET(request: NextRequest) {
     const kid = decodedHeader.kid;
 
     const thirdwebPayload = {
-      iss: process.env.NEXT_PUBLIC_BASE_URL,
+      iss: BASE_URL,
       sub: payload.sub,
       aud: process.env.NEXT_PUBLIC_THIRDWEB_CLIENT_ID,
       exp: Math.floor(Date.now() / 1000) + 3600,
@@ -117,20 +116,25 @@ export async function GET(request: NextRequest) {
       keyid: kid,
     });
 
-    // クライアントにトークンを返す
-    return NextResponse.redirect(
-      new URL(
-        `${process.env.NEXT_PUBLIC_BASE_URL}/?token=${thirdwebToken}`,
-        request.url
-      )
-    );
+    const response = NextResponse.redirect(new URL(BASE_URL, request.url), 302);
+    response.cookies.set("temp_auth_token", thirdwebToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: 60,
+    });
+
+    return response;
   } catch (error) {
     console.error("Error during WorldID authentication:", error);
-    return NextResponse.redirect(
-      new URL(
-        `${process.env.NEXT_PUBLIC_BASE_URL}/?error=auth_failed`,
-        request.url
-      )
-    );
+    const response = NextResponse.redirect(new URL(BASE_URL, request.url), 302);
+    response.cookies.set("temp_auth_error", "Authentication failed", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: 60,
+    });
+
+    return response;
   }
 }

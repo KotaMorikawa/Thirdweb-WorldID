@@ -87,11 +87,11 @@ export default function HomeComponent({
       if (activeWallet) {
         await disconnect(activeWallet);
         setIsConnected(false);
-        localStorage.removeItem("walletConnected");
-        localStorage.removeItem("jwtToken");
       } else {
         setError("No active wallet to disconnect");
       }
+      localStorage.removeItem("walletConnected");
+      localStorage.removeItem("jwtToken");
     } catch (error) {
       console.error("Error disconnecting wallet:", error);
       if (error instanceof Error) {
